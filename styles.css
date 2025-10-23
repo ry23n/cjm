@@ -1,0 +1,14 @@
+:root{font-family:Inter,system-ui,Segoe UI,Arial;}
+body{margin:0;background:#f6f9fc;color:#111;}
+.site-header{display:flex;align-items:center;gap:12px;padding:18px;background:#fff;box-shadow:0 2px 6px rgba(0,0,0,.06)}
+.logo{height:48px}
+.container{max-width:900px;margin:28px auto;padding:16px}
+.hero{display:flex;gap:12px;align-items:center}
+.hero-img{width:180px;height:120px;object-fit:cover;border-radius:8px}
+.form-card{background:#fff;padding:18px;border-radius:10px;box-shadow:0 6px 20px rgba(10,20,40,.06);margin-top:16px}
+.row{display:flex;gap:12px}
+label{display:block;margin-bottom:10px}
+input{width:100%;padding:10px;border:1px solid #ddd;border-radius:6px}
+button{background:#007aff;color:#fff;border:none;padding:10px 16px;border-radius:6px;cursor:pointer}
+#feedback{margin-top:12px}
+.site-footer{text-align:center;padding:12px;color:#666}

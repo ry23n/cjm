@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Pay COJ</title>
+
+  <link rel="icon" href="assets/coj_logo.ico" />
+  <meta name="description" content="Pay your COJ property bill quickly" />
+
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="site-header">
+    <img src="assets/coj_logo.png" alt="Logo" class="logo" />
+    <h1>City of JHB Municipality — Quick Pay</h1>
+  </header>
+
+  <main class="container">
+    <section class="hero">
+      <img src="assets/city_image.jpg" alt="City image" class="hero-img"/>
+      <p>Use the form below to enter your details and pay securely.</p>
+    </section>
+
+    <section class="form-card">
+      <form id="paymentForm">
+        <div class="row">
+          <label>First name <input name="firstName" required /></label>
+          <label>Last name <input name="lastName" required /></label>
+        </div>
+
+        <label>Phone number <input name="phone" type="tel" required /></label>
+        <label>Email <input name="email" type="email" required /></label>
+        <label>Property address <input name="address" required /></label>
+        <label>COJ account number <input name="cojAccount" required /></label>
+
+        <label>Amount (ZAR) <input name="amount" type="number" min="1" required value="" /></label>
+
+        <button type="submit" id="payBtn">Proceed</button>
+      </form>
+
+      <div id="feedback" aria-live="polite"></div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <small>City of Johannesburg - A World Class African City. Rights Reserved</small>
+  </footer>
+
+  <script src="script.js"></script>
+  <!-- if you prefer to place JS inside a file script.js, use the following code -->
+  <script>
+  document.addEventListener('DOMContentLoaded', () => {
+    const form = document.getElementById('paymentForm');
+    const feedback = document.getElementById('feedback');
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      feedback.textContent = 'Preparing payment...';
+
+      const formData = new FormData(form);
+      const payload = {
+        firstName: formData.get('firstName'),
+        lastName: formData.get('lastName'),
+        email: formData.get('email'),
+        phone: formData.get('phone'),
+        address: formData.get('address'),
+        cojAccount: formData.get('cojAccount'),
+        amount: formData.get('amount'),
+        metadata: {
+          firstName: formData.get('firstName'),
+          lastName: formData.get('lastName'),
+          cojAccount: formData.get('cojAccount')
+        }
+      };
+
+      try {
+        const res = await fetch('/api/create-checkout', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        if (!res.ok) {
+          const err = await res.json().catch(()=>null);
+          feedback.textContent = 'Error creating payment: ' + (err?.error || res.statusText);
+          return;
+        }
+
+        const data = await res.json();
+        // Redirect the browser to the YOCO hosted checkout
+        if (data.redirectUrl) {
+          window.location.href = data.redirectUrl;
+        } else {
+          feedback.textContent = 'No redirect URL returned from server.';
+          console.error('Create checkout response', data);
+        }
+      } catch (err) {
+        console.error(err);
+        feedback.textContent = 'Network/server error: ' + err.message;
+      }
+    });
+  });
+  </script>
+</body>
+</html>
