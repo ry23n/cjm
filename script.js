@@ -1,18 +1,24 @@
-// script.js - client
-// Uses relative endpoint so it works on the same domain as your Vercel deployment.
+// script.js - clean version
 const BACKEND_PATH = "/api/create-checkout";
-
 const form = document.getElementById('paymentForm');
 const feedback = document.getElementById('feedback');
 
 form.addEventListener('submit', async (e) => {
   e.preventDefault();
-  feedback.textContent = "Preparing payment…";
 
   const formData = Object.fromEntries(new FormData(form).entries());
   const amountZAR = parseFloat(formData.amount) || 0;
 
-  // Convert ZAR to cents (YOCO expects integer cents)
+  // Prevent invalid amounts before sending to backend
+  if (amountZAR < 2) {
+    feedback.textContent = "Minimum payment is R2.00";
+    feedback.style.color = "red";
+    return;
+  }
+
+  feedback.textContent = "Preparing payment, please wait...";
+  feedback.style.color = "black";
+
   const amountCents = Math.round(amountZAR * 100);
 
   try {
@@ -30,21 +36,26 @@ form.addEventListener('submit', async (e) => {
 
     const body = await resp.json();
 
-    if (!resp.ok) {
-      feedback.textContent = 'Payment could not be started: ' + (body && body.error ? body.error : resp.statusText);
-      console.error('Backend error:', body);
+    if (!resp.ok || !body.checkout_url) {
+      // Show friendly message instead of flashing an error
+      feedback.textContent = "Unable to start payment. Please try again.";
+      feedback.style.color = "red";
+      console.error("Backend returned:", body);
       return;
     }
 
-    // Backend returns { checkout_url: "https://..." }
-    if (body.checkout_url) {
+    // Replace text with a neutral redirecting message, then redirect
+    feedback.textContent = "Redirecting to secure Yoco payment...";
+    feedback.style.color = "black";
+
+    // Small delay (optional) just to show the user something
+    setTimeout(() => {
       window.location.href = body.checkout_url;
-    } else {
-      feedback.textContent = 'Payment could not be started. Please try again.';
-      console.error('Missing checkout_url in response', body);
-    }
+    }, 300);
+
   } catch (err) {
+    feedback.textContent = "Network error. Please try again.";
+    feedback.style.color = "red";
     console.error(err);
-    feedback.textContent = 'Error initiating payment: ' + err.message;
   }
 });
