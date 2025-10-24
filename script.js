@@ -1,5 +1,6 @@
-// Edit BACKEND_URL to your Vercel function URL (or use relative '/api/create-checkout' if deployed together)
-const BACKEND_URL = "https://<your-backend-deployment>.vercel.app/api/create-checkout";
+// script.js - client
+// Uses relative endpoint so it works on the same domain as your Vercel deployment.
+const BACKEND_PATH = "/api/create-checkout";
 
 const form = document.getElementById('paymentForm');
 const feedback = document.getElementById('feedback');
@@ -8,37 +9,40 @@ form.addEventListener('submit', async (e) => {
   e.preventDefault();
   feedback.textContent = "Preparing payment…";
 
-  const data = Object.fromEntries(new FormData(form).entries());
-  // amount is in ZAR; YOCO expects amount in cents (integer). We convert.
-  // For checkout API YOCO expects amount in cents (e.g., R100 -> 10000)
-  const amountZAR = parseFloat(data.amount) || 0;
+  const formData = Object.fromEntries(new FormData(form).entries());
+  const amountZAR = parseFloat(formData.amount) || 0;
+
+  // Convert ZAR to cents (YOCO expects integer cents)
   const amountCents = Math.round(amountZAR * 100);
 
   try {
-    const resp = await fetch(BACKEND_URL, {
+    const resp = await fetch(BACKEND_PATH, {
       method: 'POST',
-      headers: { 'Content-Type':'application/json' },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         amount: amountCents,
-        currency: "ZAR",
-        metadata: data // pass all collected fields as metadata
+        currency: 'ZAR',
+        metadata: { reference: formData.reference || '' },
+        successUrl: window.location.origin + '/success.html',
+        cancelUrl: window.location.origin + '/cancel.html'
       })
     });
 
+    const body = await resp.json();
+
     if (!resp.ok) {
-      const txt = await resp.text();
-      throw new Error(txt || 'Server error');
+      feedback.textContent = 'Payment could not be started: ' + (body && body.error ? body.error : resp.statusText);
+      console.error('Backend error:', body);
+      return;
     }
 
-    const body = await resp.json();
-    // Expect { checkout_url: "https://..." }
+    // Backend returns { checkout_url: "https://..." }
     if (body.checkout_url) {
       window.location.href = body.checkout_url;
     } else {
       feedback.textContent = 'Payment could not be started. Please try again.';
-      console.error(body);
+      console.error('Missing checkout_url in response', body);
     }
-
   } catch (err) {
     console.error(err);
     feedback.textContent = 'Error initiating payment: ' + err.message;
