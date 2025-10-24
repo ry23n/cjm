@@ -1,5 +1,9 @@
 // api/create-checkout.js
 // Vercel serverless function — must not expose secret keys in client code.
+import dotenv from "dotenv";
+dotenv.config();
+
+const YOCO_SECRET_KEY = process.env.YOCO_SECRET_KEY;
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
