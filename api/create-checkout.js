@@ -1,5 +1,7 @@
 // api/create-checkout.js
-// Vercel serverless function — must not expose secret keys in client code.
+// Vercel serverless function (Node ESM); uses node-fetch (already in your package.json)
+import fetch from 'node-fetch';
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     res.status(405).json({ error: 'Method not allowed' });
@@ -7,61 +9,72 @@ export default async function handler(req, res) {
   }
 
   try {
-    const body = await (req.body && Object.keys(req.body).length ? req.body : JSON.parse(req.rawBody || '{}'));
-    // Ensure the amount is provided
+    // parse JSON body
+    const body = req.body && Object.keys(req.body).length ? req.body : JSON.parse(req.rawBody || '{}');
+
     let { amount, currency = 'ZAR', metadata = {}, successUrl, cancelUrl } = body;
 
+    // Basic validation
     if (!amount || isNaN(amount) || Number(amount) <= 0) {
       res.status(400).json({ error: 'Invalid amount' });
       return;
     }
 
-    // YOCO expects amount in cents (integer). Convert ZAR to cents.
-    const amountInCents = Math.round(Number(amount) * 100);
+    // YOCO expects amount in cents (integer). If client already sends cents, remove conversion.
+    // Here we assume client sends cents already (see client below); if client sends ZAR, multiply by 100.
+    const amountInt = Number(amount); // e.g., 10000 for R100.00
 
-    // Build payload for YOCO checkout creation
-    const payload = {
-      amount: amountInCents,
+    // Build the YOCO checkout body (simple required fields)
+    const checkoutBody = {
+      amount: amountInt,
       currency,
-      successUrl: successUrl || `${process.env.PUBLIC_BASE_URL || ''}/success.html`,
-      cancelUrl: cancelUrl || `${process.env.PUBLIC_BASE_URL || ''}/cancel.html`,
-      metadata
+      // Optionally pass metadata so you can identify this checkout from webhooks or in app.
+      metadata: metadata || {},
+      // Optional: pass return URLs (YOCO will redirect after payment)
+      successUrl: successUrl || 'https://your-site-domain/success.html',
+      cancelUrl: cancelUrl || 'https://your-site-domain/cancel.html'
     };
 
-    // Call YOCO Checkout API
-    const resp = await fetch('https://api.yoco.com/v1/checkouts', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        // DO NOT put secret keys in the client - server uses secret key from environment.
-        'Authorization': `Bearer ${process.env.YOCO_SECRET_KEY}`
-      },
-      body: JSON.stringify(payload)
-    });
-
-    if (!resp.ok) {
-      const text = await resp.text();
-      console.error('YOCO error', resp.status, text);
-      res.status(502).json({ error: 'YOCO API error', detail: text });
+    // Read secret from environment (set in Vercel as YOCO_SECRET_KEY)
+    const YOCO_SECRET_KEY = process.env.YOCO_SECRET_KEY;
+    if (!YOCO_SECRET_KEY) {
+      console.error('YOCO_SECRET_KEY missing in environment');
+      res.status(500).json({ error: 'Server misconfiguration: missing YOCO key' });
       return;
     }
 
+    const resp = await fetch('https://payments.yoco.com/api/checkouts', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${YOCO_SECRET_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(checkoutBody)
+    });
+
     const data = await resp.json();
 
-    // YOCO returns a redirect URL in the checkout response (e.g., data.redirectUrl or data.redirect_url).
-    // Inspect returned object in logs and adapt field name if different.
-    const redirectUrl = data.redirect_url || data.redirectUrl || (data && data.checkout && data.checkout.redirect_url);
+    if (!resp.ok) {
+      // Bubble up useful error to client for debugging
+      console.error('YOCO responded with error', resp.status, data);
+      res.status(502).json({ error: 'YOCO API error', status: resp.status, detail: data });
+      return;
+    }
 
-    if (!redirectUrl) {
+    // YOCO returns a redirect URL or checkout URL object — check common fields
+    // Some docs/examples send back data.checkout_url or data.redirectUrl — normalize both.
+    const checkoutUrl = data.checkout_url || data.redirectUrl || (data && data.data && data.data.redirectUrl);
+
+    if (!checkoutUrl) {
       console.error('No redirect URL from YOCO', data);
       res.status(500).json({ error: 'No redirect URL from YOCO', data });
       return;
     }
 
-    // Return redirect URL to the client
-    res.status(200).json({ redirectUrl, data });
+    // Return the checkout URL to the client
+    res.status(200).json({ checkout_url: checkoutUrl, raw: data });
   } catch (err) {
-    console.error(err);
+    console.error('Server error in create-checkout:', err);
     res.status(500).json({ error: 'Server error', detail: err.message });
   }
 }
